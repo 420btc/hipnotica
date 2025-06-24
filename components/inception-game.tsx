@@ -137,8 +137,8 @@ export default function InceptionGame({ onBack, theme }: InceptionGameProps) {
   const [kicks, setKicks] = useState(0)
   const [maxDepthReached, setMaxDepthReached] = useState(0)
 
-  const timerRef = useRef<NodeJS.Timeout>()
-  const wordChangeRef = useRef<NodeJS.Timeout>()
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const wordChangeRef = useRef<NodeJS.Timeout | null>(null)
 
   // Transformar palabra según el nivel de distorsión
   const transformWord = (word: string, level: number): string => {
