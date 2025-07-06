@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
-import { MainNav } from '@/components/main-nav'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -26,10 +25,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <div className="min-h-screen bg-background">
-            <MainNav />
-            <main className="container py-8">
-              {children}
-            </main>
+            {children}
           </div>
         </ThemeProvider>
       </body>

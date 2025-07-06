@@ -598,51 +598,7 @@ export default function HypnagogicQuest() {
               </CardContent>
             </Card>
 
-            {/* Acceso Rápido */}
-            <Card className="bg-black/20 backdrop-blur-sm border-white/10">
-              <CardHeader className="text-center pb-4">
-                <CardTitle className="text-white text-lg flex items-center justify-center">
-                  <Zap className="h-5 w-5 mr-2 text-yellow-400" />
-                  Acceso Rápido
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    onClick={() => setGameState((prev) => ({ ...prev, mode: "game-select" }))}
-                    size="sm"
-                    className="bg-purple-600/50 hover:bg-purple-600/70 text-white"
-                  >
-                    <Play className="h-4 w-4 mr-1" />
-                    Comenzar
-                  </Button>
-                  <Button
-                    onClick={() => setGameState((prev) => ({ ...prev, mode: "journal" }))}
-                    size="sm"
-                    className="bg-green-600/50 hover:bg-green-600/70 text-white"
-                  >
-                    <BookOpen className="h-4 w-4 mr-1" />
-                    Diario
-                  </Button>
-                  <Button
-                    onClick={() => setGameState((prev) => ({ ...prev, mode: "dream-recorder" }))}
-                    size="sm"
-                    className="bg-indigo-600/50 hover:bg-indigo-600/70 text-white"
-                  >
-                    <Mic className="h-4 w-4 mr-1" />
-                    Grabar
-                  </Button>
-                  <Button
-                    onClick={() => setGameState((prev) => ({ ...prev, mode: "inception-game" }))}
-                    size="sm"
-                    className="bg-red-600/50 hover:bg-red-600/70 text-white"
-                  >
-                    <Layers className="h-4 w-4 mr-1" />
-                    Inception
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+
           </div>
         </div>
 
