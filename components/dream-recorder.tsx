@@ -98,13 +98,13 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<BlobPart[]>([])
 
-  // Obtener dispositivos de audio disponibles con mejor manejo de permisos
-  const getAudioDevices = async () => {
+  // Obtener dispositivo de audio predeterminado
+  const getAudioDevice = async () => {
     try {
-      console.log("Solicitando permisos de micrófono...")
-
-      // Solicitar permisos primero con configuración básica
-      const tempStream = await navigator.mediaDevices.getUserMedia({
+      console.log("Solicitando acceso al micrófono...")
+      
+      // Solicitar acceso al micrófono con configuración básica
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
@@ -112,109 +112,48 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
         },
       })
 
-      // Cerrar el stream temporal
-      tempStream.getTracks().forEach((track) => track.stop())
-
-      console.log("Permisos concedidos, enumerando dispositivos...")
-
-      const devices = await navigator.mediaDevices.enumerateDevices()
-      const audioInputs = devices.filter((device) => device.kind === "audioinput")
-
-      console.log("Dispositivos de audio encontrados:", audioInputs)
-
-      setAudioDevices(audioInputs)
-
-      if (audioInputs.length > 0 && !selectedDeviceId) {
-        setSelectedDeviceId(audioInputs[0].deviceId)
-        setCurrentDeviceIndex(0)
-      }
-
-      return audioInputs
+      // Detener el stream temporal
+      stream.getTracks().forEach(track => track.stop())
+      
+      console.log("Acceso al micrófono concedido")
+      return true
+      
     } catch (error) {
-      console.error("Error getting audio devices:", error)
-      setMicrophoneStatus("failed")
-      alert("Error al acceder al micrófono. Por favor, permite el acceso al micrófono y recarga la página.")
-      return []
+      console.error("Error al acceder al micrófono:", error)
+      alert("No se pudo acceder al micrófono. Por favor, verifica los permisos e inténtalo de nuevo.")
+      return false
     }
   }
 
-  // Detectar si hay sonido en el micrófono con umbral más sensible
-  const detectSound = (amplitude: number) => {
-    const threshold = 0.005 // Umbral más sensible
-
-    console.log("Amplitud detectada:", amplitude)
-
-    if (amplitude > threshold) {
-      setLastSoundDetected(Date.now())
-      if (microphoneStatus === "testing" || microphoneStatus === "no-sound") {
-        console.log("¡Sonido detectado! Micrófono funcionando")
-        setMicrophoneStatus("working")
-        setAutoDetectionActive(false)
-        if (soundDetectionTimer) {
-          clearTimeout(soundDetectionTimer)
-          setSoundDetectionTimer(null)
-        }
-      }
-    }
-  }
-
-  // Cambiar automáticamente al siguiente micrófono
-  const tryNextMicrophone = async () => {
-    if (currentDeviceIndex < audioDevices.length - 1) {
-      const nextIndex = currentDeviceIndex + 1
-      setCurrentDeviceIndex(nextIndex)
-      setSelectedDeviceId(audioDevices[nextIndex].deviceId)
-      setMicrophoneStatus("testing")
-
-      // Reiniciar la detección
-      await initializeAudio(audioDevices[nextIndex].deviceId)
-      startSoundDetection()
-    } else {
-      // No hay más micrófonos para probar
-      setMicrophoneStatus("failed")
-      setAutoDetectionActive(false)
-    }
-  }
-
-  // Iniciar detección de sonido con timeout
-  const startSoundDetection = () => {
-    setLastSoundDetected(Date.now())
-
-    const timer = setTimeout(() => {
-      const timeSinceLastSound = Date.now() - lastSoundDetected
-      if (timeSinceLastSound >= 5000) {
-        // 5 segundos sin sonido
-        setMicrophoneStatus("no-sound")
-        tryNextMicrophone()
-      }
-    }, 5000)
-
-    setSoundDetectionTimer(timer)
-  }
-
-  // Inicializar audio context y análisis con dispositivo específico
-  const initializeAudio = async (deviceId?: string) => {
+  // Inicializar audio context y análisis
+  const initializeAudio = async () => {
     try {
+      console.log("Inicializando audio...")
+      
       // Limpiar contexto anterior si existe
-      if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      if (audioContextRef.current) {
         try {
-          await audioContextRef.current.close()
-        } catch {
-          /* noop */
+          if (audioContextRef.current.state !== 'closed') {
+            console.log("Cerrando contexto de audio existente...")
+            await audioContextRef.current.close()
+          }
+        } catch (error) {
+          console.error('Error al cerrar el contexto de audio anterior:', error)
+        } finally {
+          audioContextRef.current = null
         }
-        audioContextRef.current = null
       }
 
+      // Detener cualquier stream existente
       if (audioStream) {
-        audioStream.getTracks().forEach((track) => track.stop())
+        console.log("Deteniendo stream de audio existente...")
+        audioStream.getTracks().forEach(track => track.stop())
         setAudioStream(null)
       }
 
-      const targetDeviceId = deviceId || selectedDeviceId
-
+      // Configuración básica del micrófono
       const constraints = {
         audio: {
-          deviceId: targetDeviceId ? { exact: targetDeviceId } : undefined,
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
@@ -222,22 +161,29 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
         },
       }
 
-      console.log("Intentando acceder al micrófono con constraints:", constraints)
-
+      console.log("Solicitando acceso al micrófono...")
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      console.log("Acceso al micrófono concedido")
       setAudioStream(stream)
 
       // Crear contexto de audio
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      console.log("Creando AudioContext...")
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+        latencyHint: 'interactive',
+        sampleRate: 44100
+      })
 
       // Reanudar contexto si está suspendido
       if (audioContext.state === "suspended") {
+        console.log("Reanudando AudioContext suspendido...")
         await audioContext.resume()
       }
 
       audioContextRef.current = audioContext
+      console.log("AudioContext creado con estado:", audioContext.state)
 
-      // Crear analizador
+      // Crear y configurar analizador
+      console.log("Configurando analizador de audio...")
       const analyser = audioContext.createAnalyser()
       analyser.fftSize = 2048
       analyser.smoothingTimeConstant = 0.3
@@ -249,52 +195,22 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
       const source = audioContext.createMediaStreamSource(stream)
       source.connect(analyser)
 
-      // Crear un nuevo MediaRecorder
+      // Crear MediaRecorder
+      console.log("Creando MediaRecorder...")
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
       setMediaRecorder(mediaRecorder)
 
       console.log("Audio inicializado correctamente")
       return true
+      
     } catch (error) {
-      console.error("Error accessing microphone:", error)
+      console.error("Error al inicializar el audio:", error)
+      alert("Error al acceder al micrófono. Asegúrate de que tienes un micrófono conectado y los permisos necesarios.")
       return false
     }
   }
 
-  // Detectar puntos de ruido
-  const detectNoise = (amplitude: number, frequencies: number[], timestamp: number) => {
-    const noiseThreshold = 0.3
-    const spikeThreshold = 0.7
-
-    // Detectar picos de ruido
-    if (amplitude > spikeThreshold) {
-      const noisePoint: NoisePoint = {
-        timestamp,
-        amplitude,
-        type: "spike",
-        severity: amplitude > 0.9 ? "high" : "medium",
-      }
-      setNoisePoints((prev) => [...prev.slice(-50), noisePoint])
-    }
-
-    // Detectar ruido sostenido
-    else if (amplitude > noiseThreshold) {
-      const recentNoise = noisePoints.filter(
-        (point) => timestamp - point.timestamp < 2000 && point.type === "sustained",
-      )
-
-      if (recentNoise.length === 0) {
-        const noisePoint: NoisePoint = {
-          timestamp,
-          amplitude,
-          type: "sustained",
-          severity: amplitude > 0.5 ? "medium" : "low",
-        }
-        setNoisePoints((prev) => [...prev.slice(-50), noisePoint])
-      }
-    }
-  }
 
   // Análisis de audio en tiempo real con gráficas múltiples
   const analyzeAudio = () => {
@@ -310,12 +226,29 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
     const dataArray = new Uint8Array(bufferLength)
     const timeDataArray = new Uint8Array(bufferLength)
 
+    // Limpiar animación previa si existe
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current)
+      animationRef.current = null
+    }
+
     const draw = () => {
       try {
+        // Verificar si el audio está silenciado o suspendido
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          console.log('AudioContext suspendido, intentando reanudar...')
+          audioContextRef.current.resume()
+          animationRef.current = requestAnimationFrame(draw)
+          return
+        }
+
         if (!isRecording || !analyserRef.current) {
           console.log('Grabación detenida o analizador no disponible')
           return
         }
+        
+        // Forzar una actualización del estado para asegurar que el componente se renderice
+        setAudioAnalysis(prev => [...prev].slice(-1))
 
         // Obtener datos de frecuencia y dominio del tiempo
         analyser.getByteFrequencyData(dataArray)
@@ -355,11 +288,8 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
         // Calcular claridad
         const clarity = 1 - noiseLevel * 0.5
 
-        // Detectar sonido para auto-detección
-        detectSound(amplitude)
-
-        // Detectar puntos de ruido
-        detectNoise(amplitude, Array.from(dataArray), Date.now())
+        // Log de depuración
+        console.log("Amplitud:", amplitude.toFixed(4), "Frecuencia dominante:", dominantFreq.toFixed(2), "Hz")
 
         // Guardar análisis
         const analysis: AudioAnalysis = {
@@ -535,7 +465,7 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
       })
   }
 
-  // Iniciar grabación con detección automática mejorada
+  // Iniciar grabación
   const startRecording = async () => {
     console.log("Iniciando grabación...")
 
@@ -546,41 +476,18 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
       }
 
       // Limpiar referencias anteriores
-      const currentMediaRecorder = mediaRecorderRef.current
-      if (currentMediaRecorder) {
-        if (currentMediaRecorder.state === 'recording') {
-          currentMediaRecorder.stop()
-          // Detener todas las pistas del stream
-          if (currentMediaRecorder.stream) {
-            currentMediaRecorder.stream.getTracks().forEach(track => track.stop())
-          }
+      if (mediaRecorderRef.current) {
+        if (mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop()
         }
       }
 
-      setAutoDetectionActive(true)
-      setMicrophoneStatus("testing")
-
-      // Obtener dispositivos
-      const devices = await getAudioDevices()
-      if (devices.length === 0) {
-        setMicrophoneStatus("failed")
-        alert("No se encontraron micrófonos disponibles. Por favor, conecta un micrófono y recarga la página.")
-        return
-      }
-
-      console.log("Dispositivos encontrados:", devices)
+      setMicrophoneStatus("working")
 
       // Inicializar audio
       const success = await initializeAudio()
       if (!success) {
-        console.log("Fallo al inicializar audio, probando siguiente micrófono...")
-        await tryNextMicrophone()
-        return
-      }
-
-      if (!mediaRecorderRef.current) {
-        console.error("MediaRecorder no se pudo inicializar")
-        setMicrophoneStatus("failed")
+        console.error("No se pudo inicializar el audio")
         return
       }
 
@@ -651,23 +558,21 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
           setIsRecording(true)
           
           // Iniciar análisis de audio
-          setTimeout(() => {
-            console.log("Iniciando análisis de audio...")
-            analyzeAudio()
-          }, 100)
+          console.log("Iniciando análisis de audio...");
+          analyzeAudio();
 
           // Iniciar temporizador
           if (timerRef.current) {
-            clearInterval(timerRef.current)
+            clearInterval(timerRef.current);
           }
           timerRef.current = setInterval(() => {
-            setRecordingTime((prev) => prev + 1)
-          }, 1000)
+            setRecordingTime((prev) => prev + 1);
+          }, 1000);
 
-          console.log("Grabación iniciada correctamente")
+          console.log("Grabación iniciada correctamente");
           
           // Iniciar detección de sonido después de que todo esté listo
-          startSoundDetection()
+          startSoundDetection();
         } catch (error) {
           console.error("Error al iniciar la grabación:", error)
           throw error
@@ -688,30 +593,54 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
 
   // Detener grabación
   const stopRecording = () => {
+    console.log("Deteniendo grabación...")
+    
+    // Detener el temporizador primero
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    
+    // Detener el análisis de audio
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current)
+      animationRef.current = null
+    }
+    
+    // Detener el MediaRecorder
     const mediaRecorder = mediaRecorderRef.current
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
       try {
         mediaRecorder.stop()
-        setIsRecording(false)
-        setRecordingTime(0)
-        
-        // Detener el análisis de audio
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current)
-          animationRef.current = null
-        }
-        
-        // Detener el temporizador
-        if (timerRef.current) {
-          clearInterval(timerRef.current)
-          timerRef.current = null
-        }
-        
-        console.log("Grabación detenida")
+        console.log("MediaRecorder detenido")
       } catch (error) {
-        console.error("Error al detener la grabación:", error)
+        console.error("Error al detener MediaRecorder:", error)
       }
     }
+    
+    // Detener las pistas de audio
+    if (audioStream) {
+      audioStream.getTracks().forEach(track => {
+        console.log("Deteniendo pista:", track.kind)
+        track.stop()
+      })
+      setAudioStream(null)
+    }
+    
+    // Cerrar el contexto de audio
+    if (audioContextRef.current) {
+      if (audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().then(() => {
+          console.log("AudioContext cerrado correctamente")
+        }).catch(error => {
+          console.error("Error al cerrar AudioContext:", error)
+        })
+      }
+      audioContextRef.current = null
+    }
+    
+    setIsRecording(false)
+    console.log("Grabación detenida completamente")
   }
 
   // Guardar grabación
@@ -739,8 +668,8 @@ export default function DreamRecorder({ onBack, theme }: DreamRecorderProps) {
       setRecordings(JSON.parse(saved))
     }
 
-    // Inicializar dispositivos
-    getAudioDevices()
+    // Verificar acceso al micrófono
+    getAudioDevice()
   }, [])
 
   // Formatear tiempo
